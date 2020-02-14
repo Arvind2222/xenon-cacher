@@ -109,6 +109,7 @@ class Cacher:
         try:
             self.r_con = await aio_pika.connect_robust(self.rabbit_url)
             self.r_channel = await self.r_con.channel()
+            await self.r_channel.set_qos(prefetch_count=100)
             await self.db.members.create_index("guild_id")
             await self.db.roles.create_index("guild_id")
             await self.db.channels.create_index("guild_id")
@@ -118,9 +119,10 @@ class Cacher:
             )
 
             queue = await self.r_channel.declare_queue("cache", arguments={"x-max-length": 10000})
-            async with queue.iterator(no_ack=True) as messages:
+            async with queue.iterator() as messages:
                 async for msg in messages:
-                    await self._message_received(msg)
+                    async with msg.process():
+                        await self._message_received(msg)
 
         except ConnectionError:
             traceback.print_exc()
