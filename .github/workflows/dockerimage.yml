@@ -1,4 +1,4 @@
-name: Docker Image CI
+name: Docker Image
 
 on: [push]
 
@@ -17,11 +17,11 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag docker.pkg.github.com/$GITHUB_REPOSITORY/discord-cacher:latest
+      run: docker build . --file Dockerfile --tag docker.pkg.github.com/magic-bots/discord-cacher/discord-cacher:${GITHUB_REF##*/}
       
   push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: Push the Docker image
-        run: docker push docker.pkg.github.com/$GITHUB_REPOSITORY/discord-cacher:latest
+        run: docker push docker.pkg.github.com/magic-bots/discord-cacher/discord-cacher:${GITHUB_REF##*/}
