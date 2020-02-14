@@ -1,6 +1,7 @@
 import aiormq
 import asyncio
 import ujson as json
+import traceback
 from motor.motor_asyncio import AsyncIOMotorClient
 
 
@@ -104,9 +105,14 @@ class Cacher:
         await self.db.members.delete_one({"id": data["user"]["id"], "guild_id": data["guild_id"]})
 
     async def start(self):
-        self.r_con = await aiormq.connect(self.rabbit_url)
-        self.r_channel = await self.r_con.channel()
-        await self.r_channel.basic_consume(self.queue, self._message_received, no_ack=True)
+        try:
+            self.r_con = await aiormq.connect(self.rabbit_url)
+            self.r_channel = await self.r_con.channel()
+            await self.r_channel.basic_consume(self.queue, self._message_received, no_ack=True)
+        except ConnectionError:
+            traceback.print_exc()
+            await asyncio.sleep(5)
+            return await self.start()
 
     def run(self):
         self.loop.create_task(self.start())
