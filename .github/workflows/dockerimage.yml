@@ -7,11 +7,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       docker_pw: ${{ secrets.DockerPW }}
-      image_tag: docker.pkg.github.com/magic-bots/discord-cacher/discord-cacher:${GITHUB_REF##*/}
+      package: docker.pkg.github.com/magic-bots/discord-cacher/discord-cacher
     steps:
       - name: Login into Github packages
         run: docker login docker.pkg.github.com --username Merlintor --password $docker_pw
       - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag ${image_tag}
+        run: docker build . --file Dockerfile --tag $package::${GITHUB_REF##*/}
       - name: Push the Docker image
-        run: docker push ${image_tag}
+        run: docker push $package:${GITHUB_REF##*/}
