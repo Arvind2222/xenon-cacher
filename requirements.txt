@@ -1,0 +1,4 @@
+motor==2.1.0
+uvloop==0.14.0
+ujson==1.35
+aiormq==3.2.0
