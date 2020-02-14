@@ -12,6 +12,6 @@ jobs:
       - name: Login into Github packages
         run: docker login docker.pkg.github.com --username Merlintor --password $docker_pw
       - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag $image_tag
+        run: docker build . --file Dockerfile --tag ${image_tag}
       - name: Push the Docker image
-        run: docker push $image_tag
+        run: docker push ${image_tag}
