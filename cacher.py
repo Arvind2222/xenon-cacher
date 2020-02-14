@@ -1,8 +1,9 @@
-import aiormq
+import aio_pika
 import asyncio
 import ujson as json
 import traceback
 from motor.motor_asyncio import AsyncIOMotorClient
+import pymongo
 
 
 class Cacher:
@@ -106,14 +107,25 @@ class Cacher:
 
     async def start(self):
         try:
-            self.r_con = await aiormq.connect(self.rabbit_url)
+            self.r_con = await aio_pika.connect_robust(self.rabbit_url)
             self.r_channel = await self.r_con.channel()
-            await self.r_channel.basic_consume(self.queue, self._message_received, no_ack=True)
+            await self.db.members.create_index("guild_id")
+            await self.db.roles.create_index("guild_id")
+            await self.db.channels.create_index("guild_id")
+            await self.db.members.create_index(
+                [("guild_id", pymongo.ASCENDING), ("user.id", pymongo.ASCENDING)],
+                unique=True
+            )
+
+            queue = await self.r_channel.declare_queue("cache", arguments={"x-max-length": 10000})
+            async with queue.iterator(no_ack=True) as messages:
+                async for msg in messages:
+                    await self._message_received(msg)
+
         except ConnectionError:
             traceback.print_exc()
             await asyncio.sleep(5)
             return await self.start()
 
     def run(self):
-        self.loop.create_task(self.start())
-        self.loop.run_forever()
+        self.loop.run_until_complete(self.start())
