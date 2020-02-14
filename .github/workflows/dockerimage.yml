@@ -3,12 +3,25 @@ name: Docker Image CI
 on: [push]
 
 jobs:
-
-  build:
-
+  login:
     runs-on: ubuntu-latest
-
+    env:
+      docker_pw: ${{ secrets.DockerPW }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Login into Github packages
+        run: docker login docker.pkg.github.com --username Merlintor --password $docker_pw
+        
+  build:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag discord-cacher:latest
+      
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Push the Docker image
+        run: docker push
