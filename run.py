@@ -1,5 +1,12 @@
 from cacher import Cacher
 from os import environ as env
+import logging
+import sys
+
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
 cacher = Cacher(

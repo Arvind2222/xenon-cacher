@@ -6,6 +6,10 @@ from pymongo import UpdateOne, DeleteOne, DeleteMany
 from motor.motor_asyncio import AsyncIOMotorClient
 import pymongo
 import time
+import logging
+
+
+log = logging.getLogger(__name__)
 
 
 class Cacher:
@@ -25,6 +29,7 @@ class Cacher:
         self.db = AsyncIOMotorClient(host=mongo_url).cache
 
     async def write_bulk(self):
+        log.info("Starting write with %d operations", self.bulk_size)
         self.bulk_size = 0
         self.last_write = time.perf_counter()
         for col, bulk in self.bulk.items():
@@ -36,6 +41,8 @@ class Cacher:
             for msg, _ in bulk:
                 if not msg.processed:
                     await msg.ack()  # Acknowledge Message
+
+        log.info("Finished write")
 
     async def write_task(self):
         while True:
