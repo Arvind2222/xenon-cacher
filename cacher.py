@@ -38,11 +38,6 @@ class Cacher:
             if len(operations) > 0:
                 getattr(self.db, col).bulk_write(operations, ordered=False)
 
-            for msg, _ in reversed(bulk):
-                if not msg.processed:
-                    await msg.ack(multiple=True)
-                    break
-
         log.info("Finished write")
 
     async def write_task(self):
@@ -182,7 +177,7 @@ class Cacher:
             )
 
             queue = await self.r_channel.declare_queue("cache")
-            await queue.consume(self._message_received)
+            await queue.consume(self._message_received, no_ack=True)
             self.loop.create_task(self.write_task())
 
         except ConnectionError:
