@@ -180,7 +180,7 @@ class Cacher:
                 unique=True
             )
 
-            queue = await self.r_channel.declare_queue("cache", arguments={"x-max-length": 10000})
+            queue = await self.r_channel.declare_queue("cache")
             await queue.consume(self._message_received)
             self.loop.create_task(self.write_task())
 
