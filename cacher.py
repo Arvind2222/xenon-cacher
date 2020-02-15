@@ -21,7 +21,7 @@ class Cacher:
         self.r_channel = None
         self.write_lock = asyncio.Lock()
         self.last_write = time.perf_counter()
-        self.max_bulk = 5000
+        self.max_bulk = 1000
         self.bulk_size = 0
         self.bulk = {}
 
@@ -38,9 +38,10 @@ class Cacher:
             if len(operations) > 0:
                 getattr(self.db, col).bulk_write(operations, ordered=False)
 
-            for msg, _ in bulk:
+            for msg, _ in reversed(bulk):
                 if not msg.processed:
-                    await msg.ack()  # Acknowledge Message
+                    await msg.ack(multiple=True)
+                    break
 
         log.info("Finished write")
 
