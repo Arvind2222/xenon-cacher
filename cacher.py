@@ -36,7 +36,7 @@ class Cacher:
             operations = [o for _, o in bulk]
             self.bulk[col] = []
             if len(operations) > 0:
-                await getattr(self.db, col).bulk_write(operations, ordered=False)
+                getattr(self.db, col).bulk_write(operations, ordered=False)
 
             for msg, _ in bulk:
                 if not msg.processed:
