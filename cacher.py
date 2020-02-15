@@ -21,7 +21,7 @@ class Cacher:
         self.r_channel = None
         self.write_lock = asyncio.Lock()
         self.last_write = time.perf_counter()
-        self.max_bulk = 500
+        self.max_bulk = 5000
         self.bulk_size = 0
         self.bulk = {}
 
