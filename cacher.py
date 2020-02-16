@@ -29,7 +29,7 @@ class Cacher:
         self.db = AsyncIOMotorClient(host=mongo_url).cache
 
     async def write_bulk(self):
-        log.info("Starting write with %d operations", self.bulk_size)
+        log.info("Writing %d operations to the database", self.bulk_size)
         self.bulk_size = 0
         self.last_write = time.perf_counter()
         for col, bulk in self.bulk.items():
@@ -37,8 +37,6 @@ class Cacher:
             self.bulk[col] = []
             if len(operations) > 0:
                 getattr(self.db, col).bulk_write(operations, ordered=False)
-
-        log.info("Finished write")
 
     async def write_task(self):
         while True:
