@@ -109,7 +109,7 @@ class Cacher:
             member["guild_id"] = guild_id
             yield "members", UpdateOne({
                 # user.id and guild_id should be a unique compound index
-                "id": member["user"]["id"],
+                "user.id": member["user"]["id"],
                 "guild_id": guild_id
             }, {"$set": member}, upsert=True)
 
@@ -151,7 +151,7 @@ class Cacher:
     def cache_guild_member_add(self, data):
         yield "members", UpdateOne({
             # user.id and guild_id should be a unique compound index
-            "id": data["user"]["id"],
+            "user.id": data["user"]["id"],
             "guild_id": data["guild_id"]
         }, {"$set": data}, upsert=True)
 
@@ -159,7 +159,7 @@ class Cacher:
         yield from self.cache_guild_member_add(data)
 
     def cache_guild_member_remove(self, data):
-        yield "members", DeleteOne({"id": data["user"]["id"], "guild_id": data["guild_id"]})
+        yield "members", DeleteOne({"user.id": data["user"]["id"], "guild_id": data["guild_id"]})
 
     async def start(self):
         try:
