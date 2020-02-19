@@ -85,7 +85,7 @@ class Cacher:
             finally:
                 self.write_lock.release()
 
-    def cache_guild_create(self, data):
+    def cache_guild_create(self, data, *, upsert=True):
         ignore = ("emojis", "voice_states", "presences")
         for k in ignore:
             data.pop(k, None)
@@ -96,13 +96,13 @@ class Cacher:
         for role in roles:
             role["_id"] = role["id"]
             role["guild_id"] = guild_id
-            yield "roles", UpdateOne({"_id": role["id"]}, {"$set": role}, upsert=True)
+            yield "roles", UpdateOne({"_id": role["id"]}, {"$set": role}, upsert=upsert)
 
         channels = data.pop("channels", [])
         for channel in channels:
             channel["_id"] = channel["id"]
             channel["guild_id"] = guild_id
-            yield "channels", UpdateOne({"_id": channel["id"]}, {"$set": channel}, upsert=True)
+            yield "channels", UpdateOne({"_id": channel["id"]}, {"$set": channel}, upsert=upsert)
 
         members = data.pop("members", [])
         for member in members:
@@ -117,7 +117,7 @@ class Cacher:
         yield "guilds", UpdateOne({"_id": guild_id}, {"$set": data}, upsert=True)
 
     def cache_guild_update(self, data):
-        yield from self.cache_guild_create(data)
+        yield from self.cache_guild_create(data, upsert=False)
 
     def cache_guild_delete(self, data):
         guild_id = data["id"]
@@ -126,24 +126,24 @@ class Cacher:
         yield "channels", DeleteMany({"guild_id": guild_id})
         yield "roles", DeleteMany({"guild_id": guild_id})
 
-    def cache_channel_create(self, data):
+    def cache_channel_create(self, data, *, upsert=True):
         data["_id"] = data["id"]
-        yield "channels", UpdateOne({"_id": data["id"]}, {"$set": data}, upsert=True)
+        yield "channels", UpdateOne({"_id": data["id"]}, {"$set": data}, upsert=upsert)
 
     def cache_channel_update(self, data):
-        yield from self.cache_channel_create(data)
+        yield from self.cache_channel_create(data, upsert=False)
 
     def cache_channel_delete(self, data):
         yield "channels", DeleteOne({"_id": data["id"]})
 
-    def cache_guild_role_create(self, data):
+    def cache_guild_role_create(self, data, *, upsert=True):
         role = data["role"]
         role["_id"] = role["id"]
         role["guild_id"] = data["guild_id"]
-        yield "roles", UpdateOne({"_id": role["id"]}, {"$set": role}, upsert=True)
+        yield "roles", UpdateOne({"_id": role["id"]}, {"$set": role}, upsert=upsert)
 
     def cache_guild_role_update(self, data):
-        yield from self.cache_guild_role_create(data)
+        yield from self.cache_guild_role_create(data, upsert=False)
 
     def cache_guild_role_delete(self, data):
         yield "roles", DeleteOne({"_id": data["role_id"]})
@@ -166,9 +166,9 @@ class Cacher:
             self.r_con = await aio_pika.connect_robust(self.rabbit_url)
             self.r_channel = await self.r_con.channel()
             await self.r_channel.set_qos(prefetch_count=self.max_bulk)
-            await self.db.members.create_index("guild_id")
             await self.db.roles.create_index("guild_id")
             await self.db.channels.create_index("guild_id")
+            await self.db.guilds.create_index("owner_id")
             await self.db.members.create_index(
                 [("guild_id", pymongo.ASCENDING), ("user.id", pymongo.ASCENDING)],
                 unique=True
