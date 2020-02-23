@@ -60,7 +60,7 @@ class Cacher:
 
     async def _message_received(self, msg):
         payload = json.loads(msg.body)
-        event, data = payload["event"], payload["data"]
+        event, shard_id, data = payload["event"], payload["shard_id"], payload["data"]
         ev = event.lower()
         try:
             func = getattr(self, "cache_" + ev)
@@ -68,7 +68,7 @@ class Cacher:
             pass
 
         else:
-            for col, operation in func(data):
+            for col, operation in func(shard_id, data):
                 self.bulk_size += 1
                 if col not in self.bulk:
                     self.bulk[col] = [(msg, operation)]
@@ -85,7 +85,7 @@ class Cacher:
             finally:
                 self.write_lock.release()
 
-    def cache_guild_create(self, data, *, upsert=True):
+    def cache_guild_create(self, _, data, *, upsert=True):
         ignore = ("emojis", "voice_states", "presences")
         for k in ignore:
             data.pop(k, None)
@@ -116,50 +116,62 @@ class Cacher:
         data["_id"] = guild_id
         yield "guilds", UpdateOne({"_id": guild_id}, {"$set": data}, upsert=True)
 
-    def cache_guild_update(self, data):
-        yield from self.cache_guild_create(data, upsert=False)
+    def cache_guild_update(self, _, data):
+        yield from self.cache_guild_create(_, data, upsert=False)
 
-    def cache_guild_delete(self, data):
+    def cache_guild_delete(self, _, data):
         guild_id = data["id"]
         yield "guilds", DeleteOne({"_id": guild_id})
         yield "members", DeleteMany({"guild_id": guild_id})
         yield "channels", DeleteMany({"guild_id": guild_id})
         yield "roles", DeleteMany({"guild_id": guild_id})
 
-    def cache_channel_create(self, data, *, upsert=True):
+    def cache_channel_create(self, _, data, *, upsert=True):
         data["_id"] = data["id"]
         yield "channels", UpdateOne({"_id": data["id"]}, {"$set": data}, upsert=upsert)
 
-    def cache_channel_update(self, data):
-        yield from self.cache_channel_create(data, upsert=False)
+    def cache_channel_update(self, _, data):
+        yield from self.cache_channel_create(_, data, upsert=False)
 
-    def cache_channel_delete(self, data):
+    def cache_channel_delete(self, _, data):
         yield "channels", DeleteOne({"_id": data["id"]})
 
-    def cache_guild_role_create(self, data, *, upsert=True):
+    def cache_guild_role_create(self, _, data, *, upsert=True):
         role = data["role"]
         role["_id"] = role["id"]
         role["guild_id"] = data["guild_id"]
         yield "roles", UpdateOne({"_id": role["id"]}, {"$set": role}, upsert=upsert)
 
-    def cache_guild_role_update(self, data):
-        yield from self.cache_guild_role_create(data, upsert=False)
+    def cache_guild_role_update(self, _, data):
+        yield from self.cache_guild_role_create(_, data, upsert=False)
 
-    def cache_guild_role_delete(self, data):
+    def cache_guild_role_delete(self, _, data):
         yield "roles", DeleteOne({"_id": data["role_id"]})
 
-    def cache_guild_member_add(self, data):
+    def cache_guild_member_add(self, _, data):
         yield "members", UpdateOne({
             # user.id and guild_id should be a unique compound index
             "user.id": data["user"]["id"],
             "guild_id": data["guild_id"]
         }, {"$set": data}, upsert=True)
 
-    def cache_guild_member_update(self, data):
-        yield from self.cache_guild_member_add(data)
+    def cache_guild_member_update(self, _, data):
+        yield from self.cache_guild_member_add(_, data)
 
-    def cache_guild_member_remove(self, data):
-        yield "members", DeleteOne({"user.id": data["user"]["id"], "guild_id": data["guild_id"]})
+    def cache_guild_member_remove(self, _, data):
+        yield "members", DeleteOne(_, {"user.id": data["user"]["id"], "guild_id": data["guild_id"]})
+
+    def cache_latency_update(self, shard_id, data):
+        yield "shards", UpdateOne({"_id": "shard_id"}, {"$set": {
+            "_id": shard_id,
+            "latency": data["latency"]
+        }}, upsert=True)
+
+    def cache_disconnect(self, shard_id, data):
+        yield "shards", UpdateOne({"_id": shard_id}, {"$set": {
+            "_id": shard_id,
+            "latency": -1
+        }}, upsert=True)
 
     async def start(self):
         try:
