@@ -173,6 +173,12 @@ class Cacher:
             "latency": -1
         }}, upsert=True)
 
+    def cache_start(self, _, data):
+        yield "shards", UpdateOne({"_id": "meta"}, {"$set": {
+            "_id": "meta",
+            **data
+        }})
+
     async def start(self):
         try:
             self.r_con = await aio_pika.connect_robust(self.rabbit_url)
