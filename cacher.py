@@ -1,12 +1,12 @@
 import aio_pika
 import asyncio
-import ujson as json
 import traceback
 from pymongo import UpdateOne, DeleteOne, DeleteMany
 from motor.motor_asyncio import AsyncIOMotorClient
 import pymongo
 import time
 import logging
+import msgpack
 
 
 log = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class Cacher:
                     self.write_lock.release()
 
     async def _message_received(self, msg):
-        payload = json.loads(msg.body)
+        payload = msgpack.unpackb(msg.body)
         event, shard_id, data = payload["event"], payload["shard_id"], payload["data"]
         ev = event.lower()
         try:
