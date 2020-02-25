@@ -4,8 +4,7 @@ import traceback
 import aioredis
 import logging
 import msgpack
-
-from lua_scripts import scripts
+import inspect
 
 
 log = logging.getLogger(__name__)
@@ -13,8 +12,7 @@ log = logging.getLogger(__name__)
 
 def hash_safe(obj: dict):
     for key, value in obj.items():
-        if not isinstance(value, str):
-            obj[key] = msgpack.packb(value)
+        obj[key] = msgpack.packb(value)
 
 
 class Cacher:
@@ -27,7 +25,7 @@ class Cacher:
         self.r_channel = None
         self.redis = None
 
-        self._prefix = "cache_"
+        self._prefix = ""
 
         self.loop = loop or asyncio.get_event_loop()
 
@@ -44,7 +42,33 @@ class Cacher:
             pass
 
         else:
-            await func(shard_id, data)
+            res = func(shard_id, data)
+            if inspect.isawaitable(res):
+                self.loop.create_task(res)
+
+    async def _guild_roles(self, guild_id, roles):
+        for role in roles:
+            role_id = role["id"]
+            role["guild_id"] = guild_id
+            hash_safe(role)
+            await self.redis.hmset_dict(self.prefix(f"roles_{role_id}"), role)
+            await self.redis.sadd(self.prefix(f"guilds_{guild_id}_roles"), role_id)
+
+    async def _guild_channels(self, guild_id, channels):
+        for channel in channels:
+            channel_id = channel["id"]
+            channel["guild_id"] = guild_id
+            hash_safe(channel)
+            await self.redis.hmset_dict(self.prefix(f"channels_{channel_id}"), channel)
+            await self.redis.sadd(self.prefix(f"guilds_{guild_id}_channels"), channel_id)
+
+    async def _guild_members(self, guild_id, members):
+        for member in members:
+            user_id = member["user"]["id"]
+            member["guild_id"] = guild_id
+            hash_safe(member)
+            await self.redis.hmset_dict(self.prefix(f"guilds_{guild_id}_members_{user_id}"), member)
+            await self.redis.sadd(self.prefix(f"guilds_{guild_id}_members"), user_id)
 
     async def cache_guild_create(self, _, data):
         ignore = ("emojis", "voice_states", "presences")
@@ -54,28 +78,13 @@ class Cacher:
         guild_id = data["id"]
 
         roles = data.pop("roles", [])
-        for role in roles:
-            role_id = role["id"]
-            role["guild_id"] = guild_id
-            hash_safe(role)
-            await self.redis.hmset_dict(self.prefix(f"roles_{role_id}"), role)
-            await self.redis.sadd(self.prefix(f"guilds_{guild_id}_roles"), role_id)
+        self.loop.create_task(self._guild_roles(guild_id, roles))
 
         channels = data.pop("channels", [])
-        for channel in channels:
-            channel_id = channel["id"]
-            channel["guild_id"] = guild_id
-            hash_safe(channel)
-            await self.redis.hmset_dict(self.prefix(f"channels_{channel_id}"), channel)
-            await self.redis.sadd(self.prefix(f"guilds_{guild_id}_channels"), channel_id)
+        self.loop.create_task(self._guild_channels(guild_id, channels))
 
         members = data.pop("members", [])
-        for member in members:
-            user_id = member["user"]["id"]
-            member["guild_id"] = guild_id
-            hash_safe(member)
-            await self.redis.hmset_dict(self.prefix(f"guilds_{guild_id}_members_{user_id}"), member)
-            await self.redis.sadd(self.prefix(f"guilds_{guild_id}_members"), user_id)
+        self.loop.create_task(self._guild_members(guild_id, members))
 
         hash_safe(data)
         await self.redis.sadd(self.prefix("guilds"), guild_id)
@@ -90,13 +99,16 @@ class Cacher:
         await self.redis.delete(self.prefix(f"guilds_{guild_id}"))
 
         channels = await self.redis.smembers(self.prefix(f"guilds_{guild_id}_channels"))
-        await self.redis.delete(*[self.prefix(f"channels_{ch}") for ch in channels])
+        if len(channels) > 0:
+            await self.redis.delete(*[self.prefix(f"channels_{ch}") for ch in channels])
 
         roles = await self.redis.smembers(self.prefix(f"guilds_{guild_id}_roles"))
-        await self.redis.delete(*[self.prefix(f"roles_{r}") for r in roles])
+        if len(roles) > 0:
+            await self.redis.delete(*[self.prefix(f"roles_{r}") for r in roles])
 
         members = await self.redis.smembers(self.prefix(f"guilds_{guild_id}_members"))
-        await self.redis.delete(*[self.prefix(f"guilds_{guild_id}_members_{u}") for u in members])
+        if len(members) > 0:
+            await self.redis.delete(*[self.prefix(f"guilds_{guild_id}_members_{u}") for u in members])
 
     async def cache_channel_create(self, _, data):
         guild_id, channel_id = data.get("guild_id"), data["id"]
@@ -172,6 +184,7 @@ class Cacher:
             self.redis = await aioredis.create_redis_pool(self.redis_url)
             self.r_con = await aio_pika.connect_robust(self.rabbit_url)
             self.r_channel = await self.r_con.channel()
+            await self.r_channel.set_qos(prefetch_count=1000)
             await self.r_channel.set_qos()
             queue = await self.r_channel.declare_queue("cache")
             await queue.consume(self._message_received, no_ack=True)
