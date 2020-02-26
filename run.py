@@ -1,4 +1,4 @@
-from redis import Cacher
+from redis_lua import Cacher
 from os import environ as env
 import logging
 import sys
