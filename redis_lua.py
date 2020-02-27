@@ -43,9 +43,8 @@ data.presences = nil
 if data.roles ~= nil then
     for i, role in pairs(data.roles) do
         role.guild_id = data.id
-        {PAIR_SCRIPT('role', 'paired')}
-        redis.call('hmset', 'roles_' .. role.id, unpack(paired))
-        redis.call('sadd', 'guilds_' .. role.guild_id .. '_roles', role.id)
+        redis.call('hset', 'roles', role.id, cmsgpack.pack(role))
+        redis.call('sadd', 'guilds:' .. role.guild_id .. ':roles', role.id)
     end
 end
 
@@ -54,9 +53,8 @@ data.roles = nil
 if data.channels ~= nil then
     for i, channel in pairs(data.channels) do
         channel.guild_id = data.id
-        {PAIR_SCRIPT('channel', 'paired')}
-        redis.call('hmset', 'channels_' .. channel.id, unpack(paired))
-        redis.call('sadd', 'guilds_' .. channel.guild_id .. '_channels', channel.id)
+        redis.call('hset', 'channels', channel.id, cmsgpack.pack(channel))
+        redis.call('sadd', 'guilds:' .. channel.guild_id .. ':channels', channel.id)
     end
 end
 
@@ -65,55 +63,40 @@ data.channels = nil
 if data.members ~= nil then
     for i, member in pairs(data.members) do
         member.guild_id = data.id
-        {PAIR_SCRIPT('member', 'paired')}
-        redis.call('hmset', 'guilds_' .. member.guild_id .. '_members_' .. member.user.id, unpack(paired))
-        redis.call('sadd', 'guilds_' .. member.guild_id .. '_members', member.user.id)
+        redis.call('hset', 'guilds:' .. member.guild_id .. ':members', member.user.id, cmsgpack.pack(member))
     end
 end
 
 data.members = nil
 
-{PAIR_SCRIPT('data', 'paired')}
-redis.call('hmset', 'guilds_' .. data.id, unpack(paired))
-redis.call('sadd', 'guilds', data.id)
+redis.call('hmset', 'guilds', data.id, cmsgpack.pack(data))
 
 return 1
     """,
 
     guild_delete="""
 local data = cmsgpack.unpack(ARGV[1])
-redis.call('del', 'guilds_' .. data.id)
-redis.call('srem', 'guilds', data.id)
+redis.call('hdel', 'guilds', data.id)
 
-local keys = {}
+local channels = redis.call('smembers', 'guilds:' .. data.id .. ':channels')
+redis.call('hdel', 'channels', unpack(channels))
+redis.call('del', 'guilds:' .. data.id .. ':channels')
 
-local channels = redis.call('smembers', 'guilds_' .. data.id .. '_channels')
-for i, channel_id in pairs(channels) do
-    table.insert(keys, 'channels_' .. channel_id)
-end
+local roles = redis.call('smembers', 'guilds:' .. data.id .. ':roles')
+redis.call('hdel', 'roles', unpack(roles))
+redis.call('del', 'guilds:' .. data.id .. ':roles')
 
-local roles = redis.call('smembers', 'guilds_' .. data.id .. '_roles')
-for i, role_id in pairs(roles) do
-    table.insert(keys, 'roles_' .. role_id)
-end
-
-local members = redis.call('smembers', 'guilds_' .. data.id .. '_members')
-for i, member_id in pairs(members) do
-    table.insert(keys, 'guilds_' .. data.id .. '_members_' .. member_id)
-end
+redis.call('del', 'guilds:' .. data.id .. ':members')
 
 redis.call('del', unpack(keys))
     """,
 
     channel_create=f"""
 local data = cmsgpack.unpack(ARGV[1])
-{PAIR_SCRIPT('data', 'paired')}
 
-redis.call('hmset', 'channels_' .. data.id, unpack(paired))
+redis.call('hset', 'channels', data.id, ARGV[1])
 if data.guild_id ~= nil then
-    redis.call('sadd', 'guilds_' .. data.guild_id .. '_channels', data.id)
-else
-    redis.call('sadd', 'dm_channels', data.id)
+    redis.call('sadd', 'guilds:' .. data.guild_id .. ':channels', data.id)
 end
 
 return 1
@@ -121,21 +104,18 @@ return 1
 
     channel_update=f"""
 local data = cmsgpack.unpack(ARGV[1])
-{PAIR_SCRIPT('data', 'paired')}
 
-redis.call('hmset', 'channels_' .. data.id, unpack(paired))
+redis.call('hset', 'channels', data.id, ARGV[1])
 
 return 1
     """,
 
     channel_delete=f"""
 local data = cmsgpack.unpack(ARGV[1])
-redis.call('del', 'channels_' .. data.id)
+redis.call('hdel', 'channels', data.id)
 
 if data.guild_id ~= nil then
-    redis.call('srem', 'guilds_' .. data.guild_id .. '_channels', data.id)
-else
-    redis.call('srem', 'dm_channels', data.id)
+    redis.call('srem', 'guilds:' .. data.guild_id .. ':channels', data.id)
 end
 
 return 1
@@ -145,10 +125,9 @@ return 1
 local data = cmsgpack.unpack(ARGV[1])
 local role = data.role
 role.guild_id = data.guild_id
-{PAIR_SCRIPT('role', 'paired')}
 
-redis.call('hmset', 'roles_' .. role.id, unpack(paired))
-redis.call('sadd', 'guilds_' .. data.guild_id .. '_roles', role.id)
+redis.call('hset', 'roles', role.id, cmsgpack.pack(role))
+redis.call('sadd', 'guilds:' .. data.guild_id .. ':roles', role.id)
 
 return 1
 """,
@@ -157,36 +136,32 @@ return 1
 local data = cmsgpack.unpack(ARGV[1])
 local role = data.role
 role.guild_id = data.guild_id
-{PAIR_SCRIPT('role', 'paired')}
 
-redis.call('hmset', 'roles_' .. role.id, unpack(paired))
+redis.call('hset', 'roles', role.id, cmsgpack.pack(role))
 
 return 1
 """,
 
     guild_role_delete=f"""
 local data = cmsgpack.unpack(ARGV[1])
-redis.call('del', 'roles_' .. data.role_id)
-redis.call('srem', 'guilds_' .. data.guild_id .. '_roles', data.role_id)
+redis.call('hdel', 'roles', data.role_id)
+redis.call('srem', 'guilds:' .. data.guild_id .. ':roles', data.role_id)
 
 return 1
 """,
 
     guild_member_add=f"""
 local data = cmsgpack.unpack(ARGV[1])
-{PAIR_SCRIPT('data', 'paired')}
 
-redis.call('hmset', 'guilds_' .. data.guild_id .. '_members_' .. data.user.id, unpack(paired))
-redis.call('sadd', 'guilds_' .. data.guild_id .. '_members', data.user.id)
+redis.call('hset', 'guilds:' .. data.guild_id .. ':members:', data.user.id, ARGV[1])
 
 return 1
 """,
 
     guild_member_update=f"""
 local data = cmsgpack.unpack(ARGV[1])
-{PAIR_SCRIPT('data', 'paired')}
 
-redis.call('hmset', 'guilds_' .. data.guild_id .. '_members_' .. data.user.id, unpack(paired))
+redis.call('hset', 'guilds:' .. data.guild_id .. ':members', data.user.id, ARGV[1])
 
 return 1
 """,
@@ -194,8 +169,7 @@ return 1
     guild_member_remove=f"""
 local data = cmsgpack.unpack(ARGV[1])
 
-redis.call('del', 'guilds_' .. data.guild_id .. '_members_' .. data.user.id)
-redis.call('srem', 'guilds_' .. data.guild_id .. '_members', data.user.id)
+redis.call('hdel', 'guilds:' .. data.guild_id .. ':members', data.user.id)
 
 return 1
 """
@@ -204,7 +178,7 @@ return 1
 SCRIPTS["guild_update"] = SCRIPTS["guild_create"]
 
 
-print("\n".join(f"{i + 1} {l}" for i, l in enumerate(SCRIPTS["guild_create"].splitlines())))
+# print("\n".join(f"{i + 1} {l}" for i, l in enumerate(SCRIPTS["guild_create"].splitlines())))
 
 
 class Cacher:
