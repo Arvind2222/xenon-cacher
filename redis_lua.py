@@ -5,9 +5,7 @@ import aioredis
 import logging
 import msgpack
 
-
 log = logging.getLogger(__name__)
-
 
 PAIR_SCRIPT = lambda i, o: """
 local %s = {}
@@ -16,7 +14,6 @@ for key, value in pairs(%s) do
     table.insert(%s, cmsgpack.pack(value))
 end
 """ % (o, i, o, o)
-
 
 SCRIPTS = dict(
     start=f"""
@@ -219,7 +216,15 @@ class Cacher:
             self.r_channel = await self.r_con.channel()
             await self.r_channel.set_qos(prefetch_count=1000)
             await self.r_channel.set_qos()
+
+            exchange = await self.r_channel.declare_exchange('events', type='topic')
             queue = await self.r_channel.declare_queue("cache")
+            bindings = ("*.guild_create", "*.guild_update", "*.guild_delete", "*.channel_create", "*.channel_update",
+                        "*.channel_delete", "*.guild_role_create", "*.guild_role_update", "*.guild_role_delete",
+                        "*.guild_member_update", "*.start", "*.disconnect", "*.latency_update")
+            for binding in bindings:
+                await queue.bind(exchange, routing_key=binding)
+
             await queue.consume(self._message_received, no_ack=True)
 
         except ConnectionError:
