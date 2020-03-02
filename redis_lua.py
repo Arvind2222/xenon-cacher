@@ -84,8 +84,6 @@ redis.call('hdel', 'roles', unpack(roles))
 redis.call('del', 'guilds:' .. data.id .. ':roles')
 
 redis.call('del', 'guilds:' .. data.id .. ':members')
-
-redis.call('del', unpack(keys))
     """,
 
     channel_create=f"""
