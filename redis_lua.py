@@ -196,7 +196,11 @@ class Cacher:
         if script_sha is None:
             return
 
-        await self.redis.evalsha(script_sha, args=[msgpack.packb(data), *args])
+        try:
+            await self.redis.evalsha(script_sha, args=[msgpack.packb(data), *args])
+        except:
+            log.error(f"Script for event {name} failed.")
+            raise
 
     async def _message_received(self, msg):
         payload = msgpack.unpackb(msg.body)
