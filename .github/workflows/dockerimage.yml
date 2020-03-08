@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       token: ${{ secrets.GITHUB_TOKEN }}
-      package: docker.pkg.github.com/magic-bots/discord-cacher/discord-cacher
+      package: docker.pkg.github.com/magic-bots/xenon-cacher/xenon-cacher
     steps:
       - uses: actions/checkout@v2
       - name: Login to Github packages
