@@ -16,13 +16,13 @@ end
 """ % (o, i, o, o)
 
 SCRIPTS = dict(
-    start=f"""
+    init=f"""
     local data = cmsgpack.unpack(ARGV[1])
     {PAIR_SCRIPT('data', 'paired')}
     redis.call('hmset', 'state', unpack(paired))
     """,
 
-    latency_update=f"""
+    heartbeat_ack=f"""
     redis.call('hmset', 'shards', ARGV[2], ARGV[1])
     """,
 
