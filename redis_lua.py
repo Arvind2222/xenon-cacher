@@ -223,7 +223,7 @@ class Cacher:
             queue = await self.r_channel.declare_queue("cache")
             bindings = ("*.guild_create", "*.guild_update", "*.guild_delete", "*.channel_create", "*.channel_update",
                         "*.channel_delete", "*.guild_role_create", "*.guild_role_update", "*.guild_role_delete",
-                        "*.guild_member_update", "*.start", "*.disconnect", "*.latency_update")
+                        "*.guild_member_update", "*.init", "*.disconnect", "*.heartbeat_ack")
             for binding in bindings:
                 await queue.bind(exchange, routing_key=binding)
 
